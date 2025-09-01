@@ -37,7 +37,7 @@ impl Comparator {
 
         let valid_count = self.get_valid_count();
         log::info!(
-            "{}/{} total valid transactions",
+            "{}/{} total valid samples",
             valid_count,
             self.worker_count
         );

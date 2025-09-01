@@ -14,7 +14,9 @@ use yellowstone_grpc_proto::{
     prelude::SubscribeRequestFilterTransactions,
     tonic::transport::ClientTlsConfig,
 };
-use yellowstone_grpc_proto::geyser::SubscribeRequestFilterAccounts;
+use yellowstone_grpc_proto::geyser::{SubscribeRequestFilterAccounts, SubscribeRequestFilterAccountsFilter, SubscribeRequestFilterAccountsFilterMemcmp};
+use yellowstone_grpc_proto::geyser::subscribe_request_filter_accounts_filter::Filter::Memcmp;
+use yellowstone_grpc_proto::geyser::subscribe_request_filter_accounts_filter_memcmp::Data::Base58;
 use crate::{
     config::{Config, Endpoint},
     utils::{Comparator, AccountData, get_current_timestamp, open_log_file, write_log_entry},
@@ -78,12 +80,21 @@ async fn process_yellowstone_endpoint(
     let (mut subscribe_tx, mut stream) = client.subscribe().await?;
     let commitment: yellowstone_grpc_proto::geyser::CommitmentLevel = config.commitment.into();
 
+    let accounts_whitelist = vec![config.account.clone()];
+    let user_discriminator = "TfwwBiNJtao";
     let mut accounts = HashMap::new();
     accounts.insert(
         "account".to_string(),
         SubscribeRequestFilterAccounts {
-            owner: vec![config.account.clone()],
-            ..Default::default()
+            account: vec![],
+            owner: accounts_whitelist,
+            filters: vec![SubscribeRequestFilterAccountsFilter {
+                filter: Some(Memcmp(SubscribeRequestFilterAccountsFilterMemcmp {
+                    offset: 0,
+                    data: Some(Base58(user_discriminator.to_string())),
+                })),
+            }],
+            nonempty_txn_signature: None,
         },
     );
 
@@ -120,30 +131,34 @@ async fn process_yellowstone_endpoint(
                                     let owned_pubkey =  bs58::encode(&acc.owner).into_string();
 
                                     if owned_pubkey == config.account {
-                                        let timestamp = get_current_timestamp();
+                                        let winner = accounts_seen.insert(acc.pubkey.clone());
 
-                                        write_log_entry(&mut log_file, timestamp, &endpoint.name, &acc_pubkey)?;
+                                        if winner {
+                                            let timestamp = get_current_timestamp();
 
-                                        let mut comp = comparator.lock().unwrap();
+                                            write_log_entry(&mut log_file, timestamp, &endpoint.name, &acc_pubkey)?;
 
-                                        comp.add(
-                                            endpoint.name.clone(),
-                                            AccountData {
-                                                timestamp,
-                                                account_pubkey: acc_pubkey.clone(),
-                                                start_time,
-                                            },
-                                        );
+                                            let mut comp = comparator.lock().unwrap();
 
-                                        if comp.get_valid_count() == config.n_samples as usize {
-                                            log::info!("Endpoint {} shutting down after {} samples seen and {} by all workers",
-                                                endpoint.name, samples_count, config.n_samples);
-                                            shutdown_tx.send(()).unwrap();
-                                            break 'ploop;
+                                            comp.add(
+                                                endpoint.name.clone(),
+                                                AccountData {
+                                                    timestamp,
+                                                    account_pubkey: acc_pubkey.clone(),
+                                                    start_time,
+                                                },
+                                            );
+
+                                            if comp.get_valid_count() == config.n_samples as usize {
+                                                log::info!("Endpoint {} shutting down after {} samples seen and {} by all workers",
+                                                    endpoint.name, samples_count, config.n_samples);
+                                                shutdown_tx.send(()).unwrap();
+                                                break 'ploop;
+                                            }
+
+                                            log::info!("[{:.3}] [{}] {}", timestamp, endpoint.name, acc_pubkey);
+                                            samples_count += 1;
                                         }
-
-                                        log::info!("[{:.3}] [{}] {}", timestamp, endpoint.name, acc_pubkey);
-                                        samples_count += 1;
                                     }
                                 }
                             },
