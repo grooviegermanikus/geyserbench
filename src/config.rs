@@ -12,7 +12,8 @@ pub struct ConfigToml {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
-    pub transactions: i32,
+    pub n_samples: i32,
+    // pub transactions: i32,
     pub account: String,
     pub commitment: ArgsCommitment,
 }
@@ -30,10 +31,10 @@ pub struct Endpoint {
 #[serde(rename_all = "lowercase")]
 pub enum EndpointKind {
     Yellowstone,
-    Arpc,
-    Thor,
-    Shreder,
-    Jetstream,
+    // Arpc,
+    // Thor,
+    // Shreder,
+    // Jetstream,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize)]
@@ -66,7 +67,7 @@ impl ConfigToml {
     pub fn create_default(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let default_config = ConfigToml {
             config: Config {
-                transactions: 100,
+                n_samples: 100,
                 account: "pubkey".to_string(),
                 commitment: ArgsCommitment::Processed,
             },
@@ -77,12 +78,12 @@ impl ConfigToml {
                     x_token: "".to_string(),
                     kind: EndpointKind::Yellowstone,
                 },
-                Endpoint {
-                    name: "arpc".to_string(),
-                    url: "http://0.0.0.0:20202".to_string(),
-                    x_token: "".to_string(),
-                    kind: EndpointKind::Arpc,
-                },
+                // Endpoint {
+                //     name: "arpc".to_string(),
+                //     url: "http://0.0.0.0:20202".to_string(),
+                //     x_token: "".to_string(),
+                //     kind: EndpointKind::Arpc,
+                // },
             ],
         };
 

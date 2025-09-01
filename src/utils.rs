@@ -9,15 +9,15 @@ use std::{
 use crate::config::ConfigToml;
 
 #[derive(Debug, Clone)]
-pub struct TransactionData {
+pub struct AccountData {
     pub timestamp: f64,
-    pub signature: String,
+    pub account_pubkey: String,
     pub start_time: f64,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Comparator {
-    pub data: HashMap<String, HashMap<String, TransactionData>>,
+    pub data: HashMap<String, HashMap<String, AccountData>>,
     pub worker_count: usize,
 }
 
@@ -29,9 +29,9 @@ impl Comparator {
         }
     }
 
-    pub fn add(&mut self, from: String, data: TransactionData) {
+    pub fn add(&mut self, from: String, data: AccountData) {
         self.data
-            .entry(data.signature.clone())
+            .entry(data.account_pubkey.clone())
             .or_insert_with(HashMap::new)
             .insert(from.clone(), data.clone());
 

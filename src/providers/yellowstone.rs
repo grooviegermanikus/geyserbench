@@ -3,7 +3,7 @@ use std::{
     error::Error,
     sync::{Arc, Mutex},
 };
-
+use std::collections::HashSet;
 use futures_util::{stream::StreamExt, sink::SinkExt};
 use tokio::{sync::broadcast, task};
 use yellowstone_grpc_client::GeyserGrpcClient;
@@ -14,10 +14,10 @@ use yellowstone_grpc_proto::{
     prelude::SubscribeRequestFilterTransactions,
     tonic::transport::ClientTlsConfig,
 };
-
+use yellowstone_grpc_proto::geyser::SubscribeRequestFilterAccounts;
 use crate::{
     config::{Config, Endpoint},
-    utils::{Comparator, TransactionData, get_current_timestamp, open_log_file, write_log_entry},
+    utils::{Comparator, AccountData, get_current_timestamp, open_log_file, write_log_entry},
 };
 
 use super::GeyserProvider;
@@ -56,7 +56,8 @@ async fn process_yellowstone_endpoint(
     start_time: f64,
     comparator: Arc<Mutex<Comparator>>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let mut transaction_count = 0;
+    let mut samples_count = 0;
+    let mut accounts_seen: HashSet<Vec<u8>> = HashSet::new();
 
     let mut log_file = open_log_file(&endpoint.name)?;
 
@@ -77,13 +78,11 @@ async fn process_yellowstone_endpoint(
     let (mut subscribe_tx, mut stream) = client.subscribe().await?;
     let commitment: yellowstone_grpc_proto::geyser::CommitmentLevel = config.commitment.into();
 
-    let mut transactions = HashMap::new();
-    transactions.insert(
+    let mut accounts = HashMap::new();
+    accounts.insert(
         "account".to_string(),
-        SubscribeRequestFilterTransactions {
-            account_include: vec![config.account.clone()],
-            account_exclude: vec![],
-            account_required: vec![],
+        SubscribeRequestFilterAccounts {
+            owner: vec![config.account.clone()],
             ..Default::default()
         },
     );
@@ -91,8 +90,8 @@ async fn process_yellowstone_endpoint(
     subscribe_tx
         .send(SubscribeRequest {
             slots: HashMap::default(),
-            accounts: HashMap::default(),
-            transactions,
+            accounts,
+            transactions: HashMap::default(),
             transactions_status: HashMap::default(),
             entry: HashMap::default(),
             blocks: HashMap::default(),
@@ -115,39 +114,36 @@ async fn process_yellowstone_endpoint(
                 match message {
                     Some(Ok(msg)) => {
                         match msg.update_oneof {
-                            Some(UpdateOneof::Transaction(tx_msg)) => {
-                                if let Some(tx) = tx_msg.transaction {
-                                    let accounts = tx.transaction.clone().unwrap().message.unwrap().account_keys
-                                        .iter()
-                                        .map(|key| bs58::encode(key).into_string())
-                                        .collect::<Vec<String>>();
+                            Some(UpdateOneof::Account(acc_msg)) => {
+                                if let Some(acc) = acc_msg.account {
+                                    let acc_pubkey = bs58::encode(&acc.pubkey).into_string();
+                                    let owned_pubkey =  bs58::encode(&acc.owner).into_string();
 
-                                    if accounts.contains(&config.account) {
+                                    if owned_pubkey == config.account {
                                         let timestamp = get_current_timestamp();
-                                        let signature = bs58::encode(&tx.transaction.unwrap().signatures[0]).into_string();
 
-                                        write_log_entry(&mut log_file, timestamp, &endpoint.name, &signature)?;
+                                        write_log_entry(&mut log_file, timestamp, &endpoint.name, &acc_pubkey)?;
 
                                         let mut comp = comparator.lock().unwrap();
 
                                         comp.add(
                                             endpoint.name.clone(),
-                                            TransactionData {
+                                            AccountData {
                                                 timestamp,
-                                                signature: signature.clone(),
+                                                account_pubkey: acc_pubkey.clone(),
                                                 start_time,
                                             },
                                         );
 
-                                        if comp.get_valid_count() == config.transactions as usize {
-                                            log::info!("Endpoint {} shutting down after {} transactions seen and {} by all workers",
-                                                endpoint.name, transaction_count, config.transactions);
+                                        if comp.get_valid_count() == config.n_samples as usize {
+                                            log::info!("Endpoint {} shutting down after {} samples seen and {} by all workers",
+                                                endpoint.name, samples_count, config.n_samples);
                                             shutdown_tx.send(()).unwrap();
                                             break 'ploop;
                                         }
 
-                                        log::info!("[{:.3}] [{}] {}", timestamp, endpoint.name, signature);
-                                        transaction_count += 1;
+                                        log::info!("[{:.3}] [{}] {}", timestamp, endpoint.name, acc_pubkey);
+                                        samples_count += 1;
                                     }
                                 }
                             },

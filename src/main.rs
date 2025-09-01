@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let endpoint_count = config.endpoint.len();
 
     let start_time = get_current_timestamp();
-    let comparator = Arc::new(Mutex::new(Comparator::new(config.config.transactions as usize)));
+    let comparator = Arc::new(Mutex::new(Comparator::new(config.config.n_samples as usize)));
 
 
     let mut handles = Vec::new();
