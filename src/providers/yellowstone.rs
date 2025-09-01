@@ -59,7 +59,7 @@ async fn process_yellowstone_endpoint(
     comparator: Arc<Mutex<Comparator>>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut samples_count = 0;
-    let mut accounts_seen: HashSet<Vec<u8>> = HashSet::new();
+    let mut accounts_seen: HashSet<(String, Vec<u8>)> = HashSet::new();
 
     let mut log_file = open_log_file(&endpoint.name)?;
 
@@ -131,9 +131,9 @@ async fn process_yellowstone_endpoint(
                                     let owned_pubkey =  bs58::encode(&acc.owner).into_string();
 
                                     if owned_pubkey == config.account {
-                                        let winner = accounts_seen.insert(acc.pubkey.clone());
+                                        let is_first = accounts_seen.insert((endpoint.name.clone(), acc.pubkey.clone()));
 
-                                        if winner {
+                                        if is_first {
                                             let timestamp = get_current_timestamp();
 
                                             write_log_entry(&mut log_file, timestamp, &endpoint.name, &acc_pubkey)?;
