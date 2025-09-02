@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use log::warn;
 use crate::utils::{Comparator, percentile};
 
 #[derive(Default)]
@@ -150,6 +151,11 @@ pub fn analyze_delays(comparator: &Comparator, endpoint_names: Vec<String>) {
                         "  Historical transactions detected: {}",
                         stats.old_transactions
                     );
+                }
+
+                if max_delay > 200.0 {
+                    warn!("  Warning: High max delay detected!");
+                    warn!(" ^^^^^");
                 }
             }
         }

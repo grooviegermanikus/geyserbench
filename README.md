@@ -4,6 +4,9 @@ A Yellowstone Geyser gRPC endpoint benchmarking tool.
 
 ## Overview
 
+**CAUTION**: ATM subscription is hard-coded to drift
+
+
 GeyserBench is a performance testing tool that connects to multiple Solana gRPC endpoints simultaneously and measures their speed and reliability in detecting transactions.
 
 ## Features

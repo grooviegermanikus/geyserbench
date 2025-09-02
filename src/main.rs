@@ -1,3 +1,4 @@
+use tokio::time::interval;
 pub use {
 
     bs58,
@@ -60,6 +61,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ));
 
     }
+
+    let comparator_dump = comparator.clone();
+    let endpoint_names_dump = endpoint_names.clone();
+    tokio::spawn(async move {
+        let mut interval = interval(tokio::time::Duration::from_secs(5));
+        loop {
+
+            analysis::analyze_delays(&comparator_dump.lock().unwrap(), endpoint_names_dump.clone());
+
+            interval.tick().await;
+        }
+
+    });
 
     tokio::spawn(async move {
         if let Ok(_) = ctrl_c().await {
