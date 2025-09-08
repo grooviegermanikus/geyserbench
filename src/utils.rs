@@ -9,15 +9,15 @@ use std::{
 use crate::config::ConfigToml;
 
 #[derive(Debug, Clone)]
-pub struct AccountData {
+pub struct TransactionData {
     pub timestamp: f64,
-    pub account_pubkey: String,
+    pub tx_signature: String,
     pub start_time: f64,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Comparator {
-    pub data: HashMap<String, HashMap<String, AccountData>>,
+    pub data: HashMap<String, HashMap<String, TransactionData>>,
     pub worker_count: usize,
 }
 
@@ -29,18 +29,14 @@ impl Comparator {
         }
     }
 
-    pub fn add(&mut self, from: String, data: AccountData) {
+    pub fn add(&mut self, from: String, data: TransactionData) {
         self.data
-            .entry(data.account_pubkey.clone())
+            .entry(data.tx_signature.clone())
             .or_insert_with(HashMap::new)
             .insert(from.clone(), data.clone());
 
         let valid_count = self.get_valid_count();
-        log::info!(
-            "{}/{} total valid samples",
-            valid_count,
-            self.worker_count
-        );
+        log::info!("{}/{} total valid samples", valid_count, self.worker_count);
     }
 
     pub fn get_valid_count(&self) -> usize {
@@ -50,7 +46,9 @@ impl Comparator {
 
 pub fn get_current_timestamp() -> f64 {
     let start = SystemTime::now();
-    let since_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
+    let since_epoch = start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
     since_epoch.as_secs_f64()
 }
 
@@ -76,11 +74,6 @@ pub fn write_log_entry(
     endpoint_name: &str,
     signature: &str,
 ) -> std::io::Result<()> {
-    let log_entry = format!(
-        "[{:.3}] [{}] {}\n",
-        timestamp,
-        endpoint_name,
-        signature
-    );
+    let log_entry = format!("[{:.3}] [{}] {}\n", timestamp, endpoint_name, signature);
     file.write_all(log_entry.as_bytes())
 }

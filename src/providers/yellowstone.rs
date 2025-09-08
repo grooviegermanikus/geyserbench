@@ -1,28 +1,29 @@
+use super::GeyserProvider;
+use crate::utils::TransactionData;
+use crate::{
+    config::{Config, Endpoint},
+    utils::{get_current_timestamp, open_log_file, write_log_entry, Comparator},
+};
+use futures_util::{sink::SinkExt, stream::StreamExt};
+use std::collections::HashSet;
 use std::{
     collections::HashMap,
     error::Error,
     sync::{Arc, Mutex},
 };
-use std::collections::HashSet;
-use futures_util::{stream::StreamExt, sink::SinkExt};
 use tokio::{sync::broadcast, task};
 use yellowstone_grpc_client::GeyserGrpcClient;
+use yellowstone_grpc_proto::geyser::subscribe_request_filter_accounts_filter::Filter::Memcmp;
+use yellowstone_grpc_proto::geyser::subscribe_request_filter_accounts_filter_memcmp::Data::Base58;
+use yellowstone_grpc_proto::geyser::{
+    SubscribeRequestFilterAccounts, SubscribeRequestFilterAccountsFilter,
+    SubscribeRequestFilterAccountsFilterMemcmp,
+};
 use yellowstone_grpc_proto::{
-    geyser::{
-        subscribe_update::UpdateOneof, SubscribeRequest, SubscribeRequestPing,
-    },
+    geyser::{subscribe_update::UpdateOneof, SubscribeRequest, SubscribeRequestPing},
     prelude::SubscribeRequestFilterTransactions,
     tonic::transport::ClientTlsConfig,
 };
-use yellowstone_grpc_proto::geyser::{SubscribeRequestFilterAccounts, SubscribeRequestFilterAccountsFilter, SubscribeRequestFilterAccountsFilterMemcmp};
-use yellowstone_grpc_proto::geyser::subscribe_request_filter_accounts_filter::Filter::Memcmp;
-use yellowstone_grpc_proto::geyser::subscribe_request_filter_accounts_filter_memcmp::Data::Base58;
-use crate::{
-    config::{Config, Endpoint},
-    utils::{Comparator, AccountData, get_current_timestamp, open_log_file, write_log_entry},
-};
-
-use super::GeyserProvider;
 
 pub struct YellowstoneProvider;
 
@@ -45,7 +46,7 @@ impl GeyserProvider for YellowstoneProvider {
                 start_time,
                 comparator,
             )
-                .await
+            .await
         })
     }
 }
@@ -59,7 +60,8 @@ async fn process_yellowstone_endpoint(
     comparator: Arc<Mutex<Comparator>>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut samples_count = 0;
-    let mut accounts_seen: HashSet<(String, Vec<u8>)> = HashSet::new();
+    // endpoint name -> tx signature
+    let mut tx_seen: HashSet<(String, Vec<u8>)> = HashSet::new();
 
     let mut log_file = open_log_file(&endpoint.name)?;
 
@@ -81,28 +83,24 @@ async fn process_yellowstone_endpoint(
     let commitment: yellowstone_grpc_proto::geyser::CommitmentLevel = config.commitment.into();
 
     let accounts_whitelist = vec![config.account.clone()];
-    let user_discriminator = "TfwwBiNJtao";
-    let mut accounts = HashMap::new();
-    accounts.insert(
-        "account".to_string(),
-        SubscribeRequestFilterAccounts {
-            account: vec![],
-            owner: accounts_whitelist,
-            filters: vec![SubscribeRequestFilterAccountsFilter {
-                filter: Some(Memcmp(SubscribeRequestFilterAccountsFilterMemcmp {
-                    offset: 0,
-                    data: Some(Base58(user_discriminator.to_string())),
-                })),
-            }],
-            nonempty_txn_signature: None,
+    let mut transactions = HashMap::new();
+    transactions.insert(
+        "transaction".to_string(),
+        SubscribeRequestFilterTransactions {
+            vote: None,
+            failed: None,
+            signature: None,
+            account_include: accounts_whitelist,
+            account_exclude: vec![],
+            account_required: vec![],
         },
     );
 
     subscribe_tx
         .send(SubscribeRequest {
             slots: HashMap::default(),
-            accounts,
-            transactions: HashMap::default(),
+            accounts: HashMap::default(),
+            transactions,
             transactions_status: HashMap::default(),
             entry: HashMap::default(),
             blocks: HashMap::default(),
@@ -125,40 +123,37 @@ async fn process_yellowstone_endpoint(
                 match message {
                     Some(Ok(msg)) => {
                         match msg.update_oneof {
-                            Some(UpdateOneof::Account(acc_msg)) => {
-                                if let Some(acc) = acc_msg.account {
-                                    let acc_pubkey = bs58::encode(&acc.pubkey).into_string();
-                                    let owned_pubkey =  bs58::encode(&acc.owner).into_string();
+                            Some(UpdateOneof::Transaction(tx_msg)) => {
+                                if let Some(tx) = tx_msg.transaction {
+                                    let tx_sig = bs58::encode(&tx.signature).into_string();
 
-                                    if owned_pubkey == config.account {
-                                        let is_first = accounts_seen.insert((endpoint.name.clone(), acc.pubkey.clone()));
+                                    let is_first = tx_seen.insert((endpoint.name.clone(), tx.signature.clone()));
 
-                                        if is_first {
-                                            let timestamp = get_current_timestamp();
+                                    if is_first {
+                                        let timestamp = get_current_timestamp();
 
-                                            write_log_entry(&mut log_file, timestamp, &endpoint.name, &acc_pubkey)?;
+                                        write_log_entry(&mut log_file, timestamp, &endpoint.name, &tx_sig)?;
 
-                                            let mut comp = comparator.lock().unwrap();
+                                        let mut comp = comparator.lock().unwrap();
 
-                                            comp.add(
-                                                endpoint.name.clone(),
-                                                AccountData {
-                                                    timestamp,
-                                                    account_pubkey: acc_pubkey.clone(),
-                                                    start_time,
-                                                },
-                                            );
+                                        comp.add(
+                                            endpoint.name.clone(),
+                                            TransactionData {
+                                                timestamp,
+                                                tx_signature: tx_sig.clone(),
+                                                start_time,
+                                            },
+                                        );
 
-                                            if comp.get_valid_count() == config.n_samples as usize {
-                                                log::info!("Endpoint {} shutting down after {} samples seen and {} by all workers",
-                                                    endpoint.name, samples_count, config.n_samples);
-                                                shutdown_tx.send(()).unwrap();
-                                                break 'ploop;
-                                            }
-
-                                            log::info!("[{:.3}] [{}] {}", timestamp, endpoint.name, acc_pubkey);
-                                            samples_count += 1;
+                                        if comp.get_valid_count() == config.n_samples as usize {
+                                            log::info!("Endpoint {} shutting down after {} samples seen and {} by all workers",
+                                                endpoint.name, samples_count, config.n_samples);
+                                            shutdown_tx.send(()).unwrap();
+                                            break 'ploop;
                                         }
+
+                                        log::info!("[{:.3}] [{}] {}", timestamp, endpoint.name, tx_sig);
+                                        samples_count += 1;
                                     }
                                 }
                             },

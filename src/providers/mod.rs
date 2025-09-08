@@ -1,9 +1,9 @@
-use std::{sync::Arc, error::Error};
+use std::{error::Error, sync::Arc};
 use tokio::sync::broadcast;
 
 use crate::{
-    utils::{Comparator, AccountData},
     config::{Config, Endpoint, EndpointKind},
+    utils::Comparator,
 };
 
 pub mod yellowstone;

@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use crate::utils::{percentile, Comparator};
 use log::warn;
-use crate::utils::{Comparator, percentile};
+use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct EndpointStats {
