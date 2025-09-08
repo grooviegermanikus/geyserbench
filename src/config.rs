@@ -12,7 +12,7 @@ pub struct ConfigToml {
 pub struct Config {
     pub n_samples: i32,
     // pub transactions: i32,
-    pub account: String,
+    pub account: Option<String>,
     pub commitment: ArgsCommitment,
 }
 
@@ -64,7 +64,7 @@ impl ConfigToml {
         let default_config = ConfigToml {
             config: Config {
                 n_samples: 100,
-                account: "pubkey".to_string(),
+                account: None,
                 commitment: ArgsCommitment::Processed,
             },
             endpoint: vec![

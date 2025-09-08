@@ -82,7 +82,11 @@ async fn process_yellowstone_endpoint(
     let (mut subscribe_tx, mut stream) = client.subscribe().await?;
     let commitment: yellowstone_grpc_proto::geyser::CommitmentLevel = config.commitment.into();
 
-    let accounts_whitelist = vec![config.account.clone()];
+    let accounts_whitelist = match config.account {
+        Some(filter_account) => vec![filter_account],
+        None => vec![]
+    };
+
     let mut transactions = HashMap::new();
     transactions.insert(
         "transaction".to_string(),
