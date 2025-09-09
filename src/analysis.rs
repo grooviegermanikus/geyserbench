@@ -145,10 +145,10 @@ pub fn analyze_delays(comparator: &Comparator, endpoint_names: Vec<String>) {
                 println!("  Median delay: {:.2} ms", p50);
                 println!("  95th percentile: {:.2} ms", p95);
                 println!("  Min/Max delay: {:.2}/{:.2} ms", min_delay, max_delay);
-                println!("  Valid transactions: {}", stats.total_valid_transactions);
+                println!("  Valid account updates: {}", stats.total_valid_transactions);
                 if stats.old_transactions > 0 {
                     println!(
-                        "  Historical transactions detected: {}",
+                        "  Historical account updates detected: {}",
                         stats.old_transactions
                     );
                 }

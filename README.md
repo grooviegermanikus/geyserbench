@@ -31,7 +31,7 @@ When first run, GeyserBench will create a default `config.toml` file. Edit this 
 
 ```toml
 [config]
-transactions = 1000
+n_samples = 1000
 account = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
 commitment = "processed"
 
@@ -111,5 +111,5 @@ endpoint 2:
   Median delay: 38.75 ms
   95th percentile: 62.18 ms
   Min/Max delay: 12.45/89.32 ms
-  Valid transactions: 97
+  Valid account updates: 97
 ```
