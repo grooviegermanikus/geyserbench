@@ -11,6 +11,7 @@ use std::{
     error::Error,
     sync::{Arc, Mutex},
 };
+use log::info;
 use tokio::{sync::broadcast, task};
 use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::geyser::subscribe_request_filter_accounts_filter::Filter::Memcmp;
@@ -71,9 +72,14 @@ async fn process_yellowstone_endpoint(
         endpoint.url
     );
 
+    info!("Configuring gRPC connection with larger window sizes!");
     let mut client = GeyserGrpcClient::build_from_shared(endpoint.url)?
         .x_token(Some(endpoint.x_token))?
-        .tls_config(ClientTlsConfig::new().with_native_roots())?
+        .tcp_nodelay(true)
+        .http2_adaptive_window(true)
+        .buffer_size(65536)
+        .initial_connection_window_size(5242880)
+        .initial_stream_window_size(4194304)
         .connect()
         .await?;
 
