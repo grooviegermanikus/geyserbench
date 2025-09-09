@@ -75,6 +75,7 @@ async fn process_yellowstone_endpoint(
     info!("Configuring gRPC connection with larger window sizes!");
     let mut client = GeyserGrpcClient::build_from_shared(endpoint.url)?
         .x_token(Some(endpoint.x_token))?
+        .tls_config(ClientTlsConfig::new().with_native_roots())?
         .tcp_nodelay(true)
         .http2_adaptive_window(true)
         .buffer_size(65536)
