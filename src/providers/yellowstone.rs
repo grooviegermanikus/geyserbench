@@ -4,7 +4,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 use std::collections::HashSet;
-use futures_util::{stream::StreamExt, sink::SinkExt};
+use futures_util::{SinkExt, StreamExt};
+use log::info;
 use tokio::{sync::broadcast, task};
 use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::{
@@ -69,9 +70,14 @@ async fn process_yellowstone_endpoint(
         endpoint.url
     );
 
+    info!("Configuring gRPC connection with larger window sizes!");
     let mut client = GeyserGrpcClient::build_from_shared(endpoint.url)?
         .x_token(Some(endpoint.x_token))?
-        .tls_config(ClientTlsConfig::new().with_native_roots())?
+        .tcp_nodelay(true)
+        .http2_adaptive_window(true)
+        .buffer_size(65536)
+        .initial_connection_window_size(5242880)
+        .initial_stream_window_size(4194304)
         .connect()
         .await?;
 
