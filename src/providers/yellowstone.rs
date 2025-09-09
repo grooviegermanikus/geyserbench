@@ -5,7 +5,7 @@ use std::{
 };
 use std::collections::HashSet;
 use futures_util::{SinkExt, StreamExt};
-use log::info;
+use log::{info, warn};
 use tokio::{sync::broadcast, task};
 use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::{
@@ -86,6 +86,7 @@ async fn process_yellowstone_endpoint(
     let (mut subscribe_tx, mut stream) = client.subscribe().await?;
     let commitment: yellowstone_grpc_proto::geyser::CommitmentLevel = config.commitment.into();
 
+    warn!("Using hardcoded DRIFT subscription");
     let accounts_whitelist = vec![config.account.clone()];
     let user_discriminator = "TfwwBiNJtao";
     let mut accounts = HashMap::new();
